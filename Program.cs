@@ -7,6 +7,9 @@ class Program
     private static int MAX_ORDERS_PER_MOD = 5;  // Max standing w/each syndicate is 132,000 and each mod costs 25,000 so there's no point in fetching more than 5 orders per mod.
     private static int DELAY_BETWEEN_REQUESTS = 1000;   // 1 second delay between each request to avoid DDoSing the Warframe Market lol
 
+    private static string appDirectory = AppDomain.CurrentDomain.BaseDirectory;
+    private static string modsFolderPath = Path.Combine(appDirectory, "WarframeSyndicateMods");
+
     static async Task Main(string[] args)
     {
         // Dynamically fetch the list of syndicates from the WarframeSyndicateMods folder.
@@ -41,7 +44,7 @@ class Program
             return;
         }
 
-        var mods = File.ReadAllLines(selectedSyndicate.ModsFile);
+        var mods = File.ReadAllLines(Path.Combine(modsFolderPath, Path.GetFileName(selectedSyndicate.ModsFile)));
         if (mods.Length == 0)
         {
             Console.WriteLine($"No mods found in {selectedSyndicate.ModsFile}. Exiting.");
@@ -65,7 +68,7 @@ class Program
     {
         var syndicates = new List<(string Name, string ModsFile)>();
 
-        string[] modFiles = Directory.GetFiles("WarframeSyndicateMods", "*.txt");
+        string[] modFiles = Directory.GetFiles(modsFolderPath, "*.txt");
 
         foreach (var file in modFiles)
         {
