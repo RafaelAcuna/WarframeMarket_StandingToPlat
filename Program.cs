@@ -89,6 +89,7 @@ class Program
         var orders = new List<Order>();
 
         using HttpClient client = new();
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("WarframeMarketStandingToPlat/1.0");
 
         foreach (var mod in mods)
         {
