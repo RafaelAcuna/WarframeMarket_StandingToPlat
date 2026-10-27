@@ -5,7 +5,8 @@ class Program
 {
     private static string API_URL = "https://api.warframe.market/v2/orders/item/";
     private static int MAX_ORDERS_PER_MOD = 5;  // Max standing w/each syndicate is 132,000 and each mod costs 25,000 so there's no point in fetching more than 5 orders per mod.
-    private static int DELAY_BETWEEN_REQUESTS = 1000;   // 1 second delay between each request to avoid DDoSing the Warframe Market lol
+    private static int MAX_CONCURRENT_REQUESTS = 5;
+    private static int DELAY_BETWEEN_BATCHES = 1000;
 
     private static string appDirectory = AppDomain.CurrentDomain.BaseDirectory;
     private static string modsFolderPath = Path.Combine(appDirectory, "WarframeSyndicateMods");
@@ -91,49 +92,57 @@ class Program
         using HttpClient client = new();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("WarframeMarketStandingToPlat/1.0");
 
-        foreach (var mod in mods)
+        var batches = mods.Chunk(MAX_CONCURRENT_REQUESTS).ToArray();
+        for (int i = 0; i < batches.Length; i++)
         {
-            var url = API_URL + mod.Trim();
-            Console.WriteLine($"\nFetching data for mod: {mod}");
+            var batchOrders = await Task.WhenAll(batches[i].Select(mod => FetchOrdersForMod(client, mod)));
+            orders.AddRange(batchOrders.SelectMany(modOrders => modOrders));
 
-            try
+            if (i < batches.Length - 1)
             {
-                var response = await client.GetFromJsonAsync<WarframeMarketResponse>(url);
-
-                if (response?.Data != null)
-                {
-                    // Only fetch visible buy orders from online-ingame users who seek to buy rank 0 mods for convenience.
-                    var sortedOrders = response.Data
-                        .Where(order =>
-                            order.Visible &&
-                            order.Type == "buy" &&
-                            order.User.Status == "ingame" &&
-                            order.Rank == 0)
-                        .OrderByDescending(order => order.Platinum)
-                        .Take(MAX_ORDERS_PER_MOD)
-                        .Select(order =>
-                        {
-                            order.ItemName = FormatItemName(mod);
-                            return order;
-                        })
-                        .ToList();
-
-                    orders.AddRange(sortedOrders);
-                }
-                else
-                {
-                    Console.WriteLine($"No data available for mod: {mod}");
-                }
+                await Task.Delay(DELAY_BETWEEN_BATCHES);
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"An error occurred while fetching data for mod {mod}: {ex.Message}");
-            }
-
-            await Task.Delay(DELAY_BETWEEN_REQUESTS);
         }
 
         return orders;
+    }
+
+    private static async Task<List<Order>> FetchOrdersForMod(HttpClient client, string mod)
+    {
+        var url = API_URL + mod.Trim();
+        Console.WriteLine($"\nFetching data for mod: {mod}");
+
+        try
+        {
+            var response = await client.GetFromJsonAsync<WarframeMarketResponse>(url);
+
+            if (response?.Data != null)
+            {
+                // Only fetch visible buy orders from online-ingame users who seek to buy rank 0 mods for convenience.
+                return response.Data
+                    .Where(order =>
+                        order.Visible &&
+                        order.Type == "buy" &&
+                        order.User.Status == "ingame" &&
+                        order.Rank == 0)
+                    .OrderByDescending(order => order.Platinum)
+                    .Take(MAX_ORDERS_PER_MOD)
+                    .Select(order =>
+                    {
+                        order.ItemName = FormatItemName(mod);
+                        return order;
+                    })
+                    .ToList();
+            }
+
+            Console.WriteLine($"No data available for mod: {mod}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"An error occurred while fetching data for mod {mod}: {ex.Message}");
+        }
+
+        return new List<Order>();
     }
 
     // Method to print the list of orders sorted by platinum DESC as messages ready to paste into the ingame chat.

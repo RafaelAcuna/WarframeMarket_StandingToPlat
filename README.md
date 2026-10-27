@@ -6,6 +6,7 @@ It allows users to find the best market prices for selling mods.
 ## Features
 
 - Fetches data from the Warframe Market API.
+- Fetches orders for up to five mods concurrently per batch; the API request is still made separately for each mod.
 - Sorts orders by platinum price.
 - Customizable syndicates / batches of mods to sell.
 
